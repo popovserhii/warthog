@@ -26,7 +26,7 @@ export interface Resource {
 @Service()
 export class ResourceServiceFactory {
   create<TResource extends Resource>(entityClass: any, repository: Repository<any>) {
-    return new ResourceService(entityClass, repository);
+    return new ResourceService<TResource>(entityClass, repository);
   }
 }
 
@@ -106,7 +106,7 @@ export class ResourceService<E extends Resource> {
     // will fail if you don't specify the property
     const errors = await validate(obj, { skipMissingProperties: true });
     if (errors.length) {
-      // TODO: create our own error format that matches Mike B's format
+      // TODO: create our own error format
       throw new ArgumentValidationError(errors);
     }
 
@@ -143,12 +143,15 @@ export class ResourceService<E extends Resource> {
   // NOTE: assumes all models have a unique `id` field
   // W extends Partial<E>
   async update<W extends any>(data: DeepPartial<E>, where: W, userId: string): Promise<E> {
-    (data as any).updatedById = userId; // TODO: fix any
+    const updatedByData = {
+      updatedAt: new Date().toISOString(),
+      updatedById: userId
+    };
 
     // const whereOptions = this.pullParamsFromClass(where);
     const found = await this.repository.findOneOrFail(where);
     const idData = ({ id: found.id } as any) as DeepPartial<E>;
-    const merged = this.repository.merge(new this.entityClass(), data, idData);
+    const merged = this.repository.merge(new this.entityClass(), data, updatedByData as any, idData);
 
     // skipMissingProperties -> partial validation of only supplied props
     const errors = await validate(merged, { skipMissingProperties: true });

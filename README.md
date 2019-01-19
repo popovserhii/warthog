@@ -116,8 +116,10 @@ input UserWhereUniqueInput {
 
 ## Limitations
 
-Since Warthog relies heavily on conventions, it only supports postgres currently
-for DBs.
+- Since Warthog relies heavily on conventions, it only supports postgres
+  currently for DBs.
+- Warthog currently uses soft-deletes by default and there is no way to
+  turn this off
 
 ## Thanks
 
