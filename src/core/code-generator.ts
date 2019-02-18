@@ -97,27 +97,7 @@ export class CodeGenerator {
 import { SnakeNamingStrategy } from '${this.options.warthogImportPath}';
 
 module.exports = {
-  cli: {
-    entitiesDir: 'src/models',
-    migrationsDir: 'db/migrations',
-    subscribersDir: 'src/subscribers'
-  },
-  database: process.env.TYPEORM_DATABASE,
-  entities: process.env.TYPEORM_ENTITIES || ['src/**/*.model.ts'],
-  host: process.env.TYPEORM_HOST || 'localhost',
-  logger: 'advanced-console',
-  logging: process.env.TYPEORM_LOGGING || 'all',
-  migrations: ['db/migrations/**/*.ts'],
   namingStrategy: new SnakeNamingStrategy(),
-  password: process.env.TYPEORM_PASSWORD,
-  port: parseInt(process.env.TYPEORM_PORT || '', 10) || 5432,
-  subscribers: ['src/**/*.model.ts'],
-  synchronize:
-    typeof process.env.TYPEORM_SYNCHRONIZE !== 'undefined'
-      ? process.env.TYPEORM_SYNCHRONIZE
-      : process.env.NODE_ENV === 'development',
-  type: 'postgres',
-  username: process.env.TYPEORM_USERNAME
 };`;
 
     return this.writeToGeneratedFolder('ormconfig.ts', contents);

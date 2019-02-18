@@ -10,7 +10,6 @@ import { Binding } from 'graphql-binding';
 import { Server as HttpServer } from 'http';
 import { Server as HttpsServer } from 'https';
 import opn = require('opn');
-import * as path from 'path';
 import { AuthChecker, buildSchema, useContainer as TypeGraphQLUseContainer } from 'type-graphql'; // formatArgumentValidationError
 import { Container } from 'typedi';
 import { Connection, ConnectionOptions, useContainer as TypeORMUseContainer } from 'typeorm';
@@ -20,10 +19,11 @@ import { getRemoteBinding } from '../gql';
 import { DataLoaderMiddleware, healthCheckMiddleware } from '../middleware';
 import { authChecker } from '../tgql';
 import { createDBConnection, mockDBConnection } from '../torm';
+
 import { CodeGenerator } from './code-generator';
+import { Config } from './config';
 
 import { BaseContext } from './Context';
-import { Maybe } from './types';
 
 export interface ServerOptions<T> {
   container?: Container;
@@ -41,17 +41,13 @@ export interface ServerOptions<T> {
 }
 
 export class Server<C extends BaseContext> {
-  appHost: string;
-  appPort: number;
+  appConfig: Config;
   authChecker: AuthChecker<C>;
   connection!: Connection;
   container: Container;
-  generatedFolder: string;
   graphQLServer!: ApolloServer;
   httpServer!: HttpServer | HttpsServer;
   logger: Logger;
-  mockDBConnection: boolean = false;
-  resolversPath: string[];
   schema?: GraphQLSchema;
 
   constructor(
@@ -64,34 +60,42 @@ export class Server<C extends BaseContext> {
     dotenv.config();
 
     // Ensure that Warthog, TypeORM and TypeGraphQL are all using the same typedi container
-
     this.container = this.appOptions.container || Container;
-
     TypeGraphQLUseContainer(this.container as any); // TODO: fix any
     TypeORMUseContainer(this.container as any); // TODO: fix any
 
-    const host: Maybe<string> = this.appOptions.host || process.env.APP_HOST;
-    if (!host) {
-      throw new Error('`host` is required');
+    if (this.appOptions.host) {
+      throw new Error(
+        '`host` option has been removed, please set `WARTHOG_APP_HOST` environment variable instead'
+      );
     }
-    this.appHost = host;
-    this.appPort = parseInt(String(this.appOptions.port || process.env.APP_PORT), 10) || 4000;
+    if (this.appOptions.port) {
+      throw new Error(
+        '`port` option has been removed, please set `WARTHOG_APP_PORT` environment variable instead'
+      );
+    }
+    if (this.appOptions.generatedFolder) {
+      throw new Error(
+        '`generatedFolder` option has been removed, please set `WARTHOG_GENERATED_FOLDER` environment variable instead'
+      );
+    }
+
     this.authChecker = this.appOptions.authChecker || authChecker;
-
-    // Use https://github.com/inxilpro/node-app-root-path to find project root
-    this.generatedFolder = this.appOptions.generatedFolder || path.join(process.cwd(), 'generated');
-    // Set this so that we can pull in decorators later
-    Container.set('warthog:generatedFolder', this.generatedFolder);
-
+    // TODO: remove container here and allow logger to be passed in
     this.logger = Container.has('LOGGER') ? Container.get('LOGGER') : logger;
-    this.resolversPath = this.appOptions.resolversPath || [process.cwd() + '/**/*.resolver.ts'];
+
+    this.appConfig = new Config();
+    this.appConfig.loadSync();
+    Container.set('WARTHOG_CONFIG', this.appConfig);
   }
 
   async establishDBConnection(): Promise<Connection> {
     if (!this.connection) {
       // Asking for a mock connection will not connect to your preferred DB and will instead
       // connect to sqlite so that you can still access all metadata
-      const connectionFn = this.appOptions.mockDBConnection ? mockDBConnection : createDBConnection;
+      const connectionFn = this.appConfig.get('MOCK_DATABASE')
+        ? mockDBConnection
+        : createDBConnection;
 
       this.connection = await connectionFn(this.dbOptions);
     }
@@ -100,10 +104,13 @@ export class Server<C extends BaseContext> {
   }
 
   async getBinding(options: { origin?: string; token?: string } = {}): Promise<Binding> {
-    return getRemoteBinding(`http://${this.appHost}:${this.appPort}/graphql`, {
-      origin: 'warthog',
-      ...options
-    });
+    return getRemoteBinding(
+      `http://${process.env.WARTHOG_APP_HOST}:${process.env.WARTHOG_APP_PORT}/graphql`,
+      {
+        origin: 'warthog',
+        ...options
+      }
+    );
   }
 
   async buildGraphQLSchema(): Promise<GraphQLSchema> {
@@ -112,7 +119,7 @@ export class Server<C extends BaseContext> {
         authChecker: this.authChecker,
         // TODO: ErrorLoggerMiddleware
         globalMiddlewares: [DataLoaderMiddleware, ...(this.appOptions.middlewares || [])],
-        resolvers: this.resolversPath
+        resolvers: this.appConfig.get('RESOLVERS_PATH')
         // TODO: scalarsMap: [{ type: GraphQLDate, scalar: GraphQLDate }]
       });
     }
@@ -123,8 +130,8 @@ export class Server<C extends BaseContext> {
   async generateFiles(): Promise<void> {
     await this.establishDBConnection();
 
-    await new CodeGenerator(this.connection, this.generatedFolder, {
-      resolversPath: this.resolversPath,
+    await new CodeGenerator(this.connection, this.appConfig.get('WARTHOG_GENERATED_FOLDER'), {
+      resolversPath: this.appConfig.get('RESOLVERS_PATH'),
       warthogImportPath: this.appOptions.warthogImportPath
     }).generate();
   }
@@ -161,9 +168,11 @@ export class Server<C extends BaseContext> {
 
     this.graphQLServer.applyMiddleware({ app, path: '/graphql' });
 
-    const url = `http://${this.appHost}:${this.appPort}${this.graphQLServer.graphqlPath}`;
+    const url = `http://${this.appConfig.get('APP_HOST')}:${this.appConfig.get('APP_PORT')}${
+      this.graphQLServer.graphqlPath
+    }`;
 
-    this.httpServer = app.listen({ port: this.appPort }, () =>
+    this.httpServer = app.listen({ port: this.appConfig.get('APP_PORT') }, () =>
       this.logger.info(`🚀 Server ready at ${url}`)
     );
 

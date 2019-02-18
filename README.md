@@ -192,6 +192,9 @@ All config is driven by environment variables.  Most options can also be set by 
 | TYPEORM_USERNAME | DB username | _none_ | _none_ |
 | TYPEORM_PASSWORD | DB password | _none_ | _none_ |
 
+TODO: full list of variables
+https://github.com/typeorm/typeorm/blob/master/docs/using-ormconfig.md#using-environment-variables
+
 ## Intentionally Opinionated
 
 Warthog is intentionally opinionated to accelerate development and make use of technology-specific features:
